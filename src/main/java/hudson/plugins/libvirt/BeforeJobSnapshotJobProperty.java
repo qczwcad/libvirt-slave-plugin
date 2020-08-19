@@ -4,16 +4,20 @@ import hudson.Extension;
 import hudson.model.JobProperty;
 import hudson.model.JobPropertyDescriptor;
 import hudson.model.Job;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.kohsuke.stapler.DataBoundConstructor;
 
 public class BeforeJobSnapshotJobProperty extends JobProperty<Job<?, ?>> {
-
+    private static final Logger LOGGER = Logger.getLogger(BeforeJobSnapshotJobProperty.class.getName());
+    
     @Extension
     public static class DescriptorImpl extends JobPropertyDescriptor {
 
         @Override
         public String getDisplayName() {
+            LOGGER.log(Level.INFO, "getDisplayName has been called");
             return "Pre-execution node snapshot";
         }
     }
