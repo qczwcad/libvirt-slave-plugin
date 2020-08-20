@@ -17,7 +17,6 @@ public class BeforeJobSnapshotJobProperty extends JobProperty<Job<?, ?>> {
 
         @Override
         public String getDisplayName() {
-            LOGGER.log(Level.INFO, "getDisplayName has been called");
             return "Pre-execution node snapshot";
         }
     }

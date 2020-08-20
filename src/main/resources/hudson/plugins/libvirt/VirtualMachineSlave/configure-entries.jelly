@@ -26,16 +26,6 @@
         </select>
     </f:entry>
 
-    <f:entry title="${%Before Job Snapshot}" field="beforeJobSnapshotName" help="/plugin/libvirt-slave/help-libvirt-beforeJobSnapshotName.html">
-        <select class="setting-input" name="beforeJobSnapshotName" value="${instance.beforeJobSnapshotName}">
-            <option selected="${it.beforeJobSnapshotName == null || it.beforeJobSnapshotName == ''}"></option>
-            <j:forEach var="sshot" items="${descriptor.getDefinedSnapshots(it.hypervisorDescription, it.virtualMachineName)}" varStatus="loop">
-                <option value="${sshot}" selected="${sshot==it.beforeJobSnapshotName?'true':null}">
-                    ${sshot}
-                </option>
-            </j:forEach>
-        </select>
-    </f:entry>
 
     <f:entry title="${%Description}" help="/help/system-config/master-slave/description.html">
         <f:textbox checkMethod="post" field="nodeDescription"/>
@@ -75,9 +65,6 @@
         </select>
     </f:entry>
 
-    <f:entry title="${%Reboot this agent after each build}" field="rebootAfterRun">
-        <f:checkbox checkMethod="post"/>
-    </f:entry>
 
 
     <f:slave-mode name="mode" node="${it}"/>

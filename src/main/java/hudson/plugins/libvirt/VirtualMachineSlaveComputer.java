@@ -143,6 +143,7 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         }
     }
 
+    // since we will revert on taskAccepted, we don't need this anymore.
     @Override
     public Future<?> disconnect(OfflineCause cause) {
         String reason = "unknown";
@@ -157,61 +158,10 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
             return super.disconnect(cause);
         }
         String virtualMachineName = slave.getVirtualMachineName();
-        VirtualMachineLauncher vmL = (VirtualMachineLauncher) getLauncher();
-        Hypervisor hypervisor;
-        try {
-            hypervisor = vmL.findOurHypervisorInstance();
-        } catch (VirtException e) {
-            taskListener.getLogger().println(e.getMessage());
-            LOGGER.log(Level.SEVERE, "cannot find hypervisor instance on disconnect" + e.getMessage());
-            return super.disconnect(cause);
-        }
+        
+        LOGGER.log(Level.INFO, "disconnect from agent: " + virtualMachineName + " reason: " + reason);
+      
 
-        LOGGER.log(Level.INFO, "Virtual machine \""  + virtualMachineName + "\" (agent \"" + getDisplayName() + "\") is to be shut down." + reason);
-        taskListener.getLogger().println("Virtual machine \"" + virtualMachineName + "\" (agent \"" + getDisplayName() + "\") is to be shut down.");
-        try {
-            Map<String, IDomain> computers = hypervisor.getDomains();
-            IDomain domain = computers.get(virtualMachineName);
-            if (domain != null) {
-                if (domain.isRunningOrBlocked()) {
-                    String snapshotName = slave.getSnapshotName();
-                    if (snapshotName != null && snapshotName.length() > 0) {
-                        taskListener.getLogger().println("Reverting to " + snapshotName + " and shutting down.");
-                        domain.revertToSnapshot(domain.snapshotLookupByName(snapshotName));
-                    } else {
-                        taskListener.getLogger().println("Shutting down.");
-
-                        System.err.println("method: " + slave.getShutdownMethod());
-                        if (slave.getShutdownMethod().equals("suspend")) {
-                            domain.suspend();
-                        } else if (slave.getShutdownMethod().equals("destroy")) {
-                            domain.destroy();
-                        } else {
-                        domain.shutdown();
-                    }
-                    }
-                } else {
-                    taskListener.getLogger().println("Already suspended, no shutdown required.");
-                }
-                Hypervisor vmC = vmL.findOurHypervisorInstance();
-                vmC.markVMOffline(getDisplayName(), vmL.getVirtualMachineName());
-            } else {
-                // log to agent
-                taskListener.getLogger().println("\"" + virtualMachineName + "\" not found on Hypervisor, can not shut down!");
-
-                // log to jenkins
-                LogRecord rec = new LogRecord(Level.WARNING, "Can not shut down {0} on Hypervisor {1}, domain not found!");
-                rec.setParameters(new Object[]{virtualMachineName, hypervisor.getHypervisorURI()});
-                LOGGER.log(rec);
-            }
-        } catch (VirtException t) {
-            taskListener.fatalError(t.getMessage(), t);
-
-            LogRecord rec = new LogRecord(Level.SEVERE, "Error while shutting down {0} on Hypervisor {1}.");
-            rec.setParameters(new Object[]{slave.getVirtualMachineName(), hypervisor.getHypervisorURI()});
-            rec.setThrown(t);
-            LOGGER.log(rec);
-        }
         return super.disconnect(cause);
     }
 
