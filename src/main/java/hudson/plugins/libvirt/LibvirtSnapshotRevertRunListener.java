@@ -37,42 +37,7 @@ public class LibvirtSnapshotRevertRunListener extends RunListener<Run<?, ?>> {
 
         Node node = executor.getOwner().getNode();
         LOGGER.log(Level.INFO, "Node: " + node.getDisplayName()); 
-        
-//        if (node instanceof VirtualMachineSlave) {
-//            VirtualMachineSlave slave = (VirtualMachineSlave) node;
-//
-//            String snapshotName = null;
-//
-//            BeforeJobSnapshotJobProperty prop = r.getParent().getProperty(BeforeJobSnapshotJobProperty.class);
-//            String jobBeforeJobSnapshotName = null;
-//            if (prop != null) {
-//                jobBeforeJobSnapshotName = prop.getSnapshotName();
-//            }
-//
-//            String slaveBeforeJobSnapshotName = slave.getBeforeJobSnapshotName();
-//
-//            if (jobBeforeJobSnapshotName != null && jobBeforeJobSnapshotName.length() > 0) {
-//                LOGGER.log(Level.INFO, "Got snapshot " + jobBeforeJobSnapshotName + " from job configuration");
-//                snapshotName = jobBeforeJobSnapshotName;
-//            }
-//
-//            if (slaveBeforeJobSnapshotName != null && slaveBeforeJobSnapshotName.length() > 0) {
-//                if (snapshotName == null) {
-//                    LOGGER.log(Level.INFO, "Got snapshot " + slaveBeforeJobSnapshotName + " from slave/node configuration");
-//                    snapshotName = slaveBeforeJobSnapshotName;
-//                } else {
-//                    LOGGER.log(Level.INFO, "Favouring snapshot from previously identified source over "
-//                                                 + slaveBeforeJobSnapshotName + " from slave/node configuration");
-//                }
-//            }
-//
-//            if (snapshotName != null) {
-//                revertVMSnapshot(slave, snapshotName, listener);
-//            }
-//        }
-//        else {
-//            LOGGER.log(Level.WARNING, "Node is not a VirtualMachineSlave");
-//        }
+   
     }
 
     private static void revertVMSnapshot(VirtualMachineSlave slave, String snapshotName, TaskListener listener) {

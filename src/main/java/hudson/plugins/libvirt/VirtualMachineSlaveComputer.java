@@ -57,89 +57,44 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
     public void taskAccepted(Executor executor, Queue.Task task) {
         LOGGER.log(Level.INFO, "taskAccepted called");
         Node node = executor.getOwner().getNode();
-        LOGGER.log(Level.INFO, "Node: " + node.getDisplayName());
-        LOGGER.log(Level.INFO, "Task: " + task.getFullDisplayName());
+        LOGGER.log(Level.INFO, "Node: {0}", node.getDisplayName());
+        LOGGER.log(Level.INFO, "Task: {0}", task.getFullDisplayName());
         
         VirtualMachineSlave slave = (VirtualMachineSlave) node;
-        if (null == slave) {
-            LOGGER.log(Level.SEVERE, "convert node to slave failed");
-        }
         
         ComputerLauncher launcher = slave.getLauncher();
-        
-        if (launcher instanceof VirtualMachineLauncher) {
-
-            VirtualMachineLauncher slaveLauncher = (VirtualMachineLauncher) launcher;
-            String vmName = slaveLauncher.getVirtualMachineName();
-             String snapshotName = slave.getSnapshotName();
-
-            LOGGER.log(Level.INFO, "Preparing to revert " + vmName + " to snapshot " + snapshotName + ".");
-
-            Hypervisor hypervisor = null;
+        VirtualMachineLauncher slaveLauncher = (VirtualMachineLauncher) launcher;
+        String vmName = slaveLauncher.getVirtualMachineName();
+        String snapshotName = slave.getSnapshotName();
+        Computer computer = slave.getComputer();
+        try {
+            computer.getChannel().syncLocalIO();
             try {
-                hypervisor = slaveLauncher.findOurHypervisorInstance();
-            } catch (VirtException e) {
-                LOGGER.log(Level.SEVERE, "reverting " + vmName + " to " + snapshotName + " failed: " + e.getMessage());
-                return;
-            }
-                    
+                computer.getChannel().close();
+                computer.disconnect(new OfflineCause.ByCLI("Stopping " + vmName + " to revert to snapshot " + snapshotName + "."));
+                try {
+                    computer.waitUntilOffline();
 
-            try {
-                Map<String, IDomain> domains = hypervisor.getDomains();
-                IDomain domain = domains.get(vmName);
-
-                if (domain != null) {
+                    LOGGER.log(Level.INFO, "Relaunching " + vmName + ".");
                     try {
-                        IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
-                        try {
-                            Computer computer = slave.getComputer();
-                            try {
-                                computer.getChannel().syncLocalIO();
-                                try {
-                                    computer.getChannel().close();
-                                    computer.disconnect(new OfflineCause.ByCLI("Stopping " + vmName + " to revert to snapshot " + snapshotName + "."));
-                                    try {
-                                        computer.waitUntilOffline();
-
-                                        LOGGER.log(Level.INFO, "Reverting " + vmName + " to snapshot " + snapshotName + ".");
-                                        domain.revertToSnapshot(snapshot);
-
-                                        LOGGER.log(Level.INFO, "Relaunching " + vmName + ".");
-                                        try {
-                                            launcher.launch(slave.getComputer(), this.taskListener);
-                                        } catch (IOException e) {
-                                            LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
-                                        } catch (InterruptedException e) {
-                                            LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
-                                        } catch (NullPointerException e) {
-                                            LOGGER.log(Level.SEVERE, "Could not determine node.");
-                                        }
-                                    } catch (InterruptedException e) {
-                                        LOGGER.log(Level.SEVERE, "Interrupted while waiting for computer to be offline: " + e);
-                                    }
-                                } catch (IOException e) {
-                                    LOGGER.log(Level.SEVERE, "Error closing channel: " + e);
-                                }
-                            } catch (InterruptedException e) {
-                                LOGGER.log(Level.SEVERE, "Interrupted while syncing IO: " + e);
-                            } catch (NullPointerException e) {
-                                LOGGER.log(Level.SEVERE, "Could not determine channel.");
-                            }
-                        } catch (VirtException e) {
-                            LOGGER.log(Level.SEVERE, "No snapshot named " + snapshotName + " for VM: " + e);
-                        }
-                    } catch (VirtException e) {
-                        LOGGER.log(Level.SEVERE, "No snapshot named " + snapshotName + " for VM: " + e);
+                        launcher.launch(slave.getComputer(), this.taskListener);
+                    } catch (IOException e) {
+                        LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
+                    } catch (InterruptedException e) {
+                        LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
+                    } catch (NullPointerException e) {
+                        LOGGER.log(Level.SEVERE, "Could not determine node.");
                     }
-                } else {
-                    LOGGER.log(Level.SEVERE, "No VM named " + vmName);
+                } catch (InterruptedException e) {
+                    LOGGER.log(Level.SEVERE, "Interrupted while waiting for computer to be offline: " + e);
                 }
-            } catch (VirtException e) {
-                LOGGER.log(Level.SEVERE, "Can't get VM domains: " + e);
+            } catch (IOException e) {
+                LOGGER.log(Level.SEVERE, "Error closing channel: " + e);
             }
-        }
-        else {
-            LOGGER.log(Level.WARNING, "Node is not a VirtualMachineSlave");
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.SEVERE, "Interrupted while syncing IO: " + e);
+        } catch (NullPointerException e) {
+            LOGGER.log(Level.SEVERE, "Could not determine channel.");
         }
     }
 
@@ -160,7 +115,57 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         String virtualMachineName = slave.getVirtualMachineName();
         
         LOGGER.log(Level.INFO, "disconnect from agent: " + virtualMachineName + " reason: " + reason);
-      
+        
+        VirtualMachineLauncher vmL = (VirtualMachineLauncher) getLauncher();
+        Hypervisor hypervisor;
+        try {
+            hypervisor = vmL.findOurHypervisorInstance();
+        } catch (VirtException e) {
+            taskListener.getLogger().println(e.getMessage());
+            LOGGER.log(Level.SEVERE, "cannot find hypervisor instance on disconnect" + e.getMessage());
+            return super.disconnect(cause);
+        }
+
+        LOGGER.log(Level.INFO, "Virtual machine \""  + virtualMachineName + "\" (agent \"" + getDisplayName() + "\") is to be shut down." + reason);
+        taskListener.getLogger().println("Virtual machine \"" + virtualMachineName + "\" (agent \"" + getDisplayName() + "\") is to be shut down.");
+        try {
+            Map<String, IDomain> computers = hypervisor.getDomains();
+            IDomain domain = computers.get(virtualMachineName);
+            if (domain != null) {
+                if (domain.isRunningOrBlocked()) {
+                   
+                    taskListener.getLogger().println("Shutting down.");
+                    System.err.println("method: " + slave.getShutdownMethod());
+                    if (slave.getShutdownMethod().equals("suspend")) {
+                        domain.suspend();
+                    } else if (slave.getShutdownMethod().equals("destroy")) {
+                        domain.destroy();
+                    } else {
+                        domain.shutdown();
+                    }
+                    
+                } else {
+                    taskListener.getLogger().println("Already suspended, no shutdown required.");
+                }
+                Hypervisor vmC = vmL.findOurHypervisorInstance();
+                vmC.markVMOffline(getDisplayName(), vmL.getVirtualMachineName());
+            } else {
+                // log to agent
+                taskListener.getLogger().println("\"" + virtualMachineName + "\" not found on Hypervisor, can not shut down!");
+
+                // log to jenkins
+                LogRecord rec = new LogRecord(Level.WARNING, "Can not shut down {0} on Hypervisor {1}, domain not found!");
+                rec.setParameters(new Object[]{virtualMachineName, hypervisor.getHypervisorURI()});
+                LOGGER.log(rec);
+            }
+        } catch (VirtException t) {
+            taskListener.fatalError(t.getMessage(), t);
+
+            LogRecord rec = new LogRecord(Level.SEVERE, "Error while shutting down {0} on Hypervisor {1}.");
+            rec.setParameters(new Object[]{slave.getVirtualMachineName(), hypervisor.getHypervisorURI()});
+            rec.setThrown(t);
+            LOGGER.log(rec);
+        }
 
         return super.disconnect(cause);
     }

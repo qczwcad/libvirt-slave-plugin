@@ -24,7 +24,9 @@ package hudson.plugins.libvirt;
 import hudson.model.TaskListener;
 
 import hudson.model.Descriptor;
+import hudson.model.Node;
 import hudson.plugins.libvirt.lib.IDomain;
+import hudson.plugins.libvirt.lib.IDomainSnapshot;
 import hudson.plugins.libvirt.lib.VirtException;
 import hudson.slaves.Cloud;
 import hudson.slaves.ComputerLauncher;
@@ -135,7 +137,16 @@ public class VirtualMachineLauncher extends ComputerLauncher {
             if (domain != null) {
                 if (domain.isNotBlockedAndNotRunning()) {
                     taskListener.getLogger().println("Starting, waiting for " + waitTimeMs + "ms to let it fully boot up...");
-                    domain.create();
+                    //domain.create();
+                    
+                    //Reverting to the snapshot configured before the real lauching.
+                    Node node = slaveComputer.getNode();
+                    VirtualMachineSlave slave = (VirtualMachineSlave) node;
+                    String snapshotName = slave.getSnapshotName();
+                    IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
+                    taskListener.getLogger().println("Reverting " + slaveComputer.getDisplayName() + " to snapshot " + snapshotName + ".");
+                    domain.revertToSnapshot(snapshot);
+                    
                     Thread.sleep(waitTimeMs);
 
                     int attempts = 0;
