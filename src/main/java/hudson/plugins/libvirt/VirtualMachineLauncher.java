@@ -54,6 +54,14 @@ public class VirtualMachineLauncher extends ComputerLauncher {
     private final String virtualMachineName;
     private final String snapshotName;
     private final int waitTimeMs;
+
+    public int getWaitTimeMs() {
+        return waitTimeMs;
+    }
+
+    public int getTimesToRetryOnFailure() {
+        return timesToRetryOnFailure;
+    }
     private final int timesToRetryOnFailure;
 
     @DataBoundConstructor
@@ -176,8 +184,8 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                 } else {
                     taskListener.getLogger().println("Already running, no startup required.");
 
-                taskListener.getLogger().println("Connecting agent client.");
-                delegate.launch(slaveComputer, taskListener);
+                    taskListener.getLogger().println("Connecting agent client.");
+                    delegate.launch(slaveComputer, taskListener);
                 }
             } else {
                 throw new IOException("VM \"" + virtualMachine.getName() + "\" (agent title \"" + slaveComputer.getDisplayName() + "\") not found!");

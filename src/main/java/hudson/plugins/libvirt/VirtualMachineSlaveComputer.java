@@ -20,6 +20,7 @@
 
 package hudson.plugins.libvirt;
 
+import hudson.Util;
 import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.Node;
@@ -32,6 +33,7 @@ import java.util.logging.Logger;
 
 import hudson.model.Slave;
 import hudson.model.TaskListener;
+import hudson.model.User;
 import hudson.plugins.libvirt.lib.IDomain;
 import hudson.plugins.libvirt.lib.IDomainSnapshot;
 import hudson.plugins.libvirt.lib.VirtException;
@@ -66,39 +68,59 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         VirtualMachineLauncher slaveLauncher = (VirtualMachineLauncher) launcher;
         String vmName = slaveLauncher.getVirtualMachineName();
         String snapshotName = slave.getSnapshotName();
-        Computer computer = slave.getComputer();
+        
+        Hypervisor hypervisor = null;
         try {
-            computer.getChannel().syncLocalIO();
-            try {
-                computer.getChannel().close();
-                computer.disconnect(new OfflineCause.ByCLI("Stopping " + vmName + " to revert to snapshot " + snapshotName + "."));
-                try {
-                    computer.waitUntilOffline();
+            hypervisor = slaveLauncher.findOurHypervisorInstance();
+        } catch (VirtException e) {
+            LOGGER.log(Level.SEVERE, "reverting " + vmName + " to " + snapshotName + " failed: " + e.getMessage());
+            return;
+        }
+        
+        String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
+        this.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
+        
+        try {
+            Map<String, IDomain> domains = hypervisor.getDomains();
+            IDomain domain = domains.get(vmName);
+            IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
+            domain.revertToSnapshot(snapshot);
+                    
+            Thread.sleep(slaveLauncher.getWaitTimeMs());
 
-                    LOGGER.log(Level.INFO, "Relaunching " + vmName + ".");
-                    try {
-                        launcher.launch(slave.getComputer(), this.taskListener);
-                    } catch (IOException e) {
-                        LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
-                    } catch (InterruptedException e) {
-                        LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
-                    } catch (NullPointerException e) {
-                        LOGGER.log(Level.SEVERE, "Could not determine node.");
-                    }
-                } catch (InterruptedException e) {
-                    LOGGER.log(Level.SEVERE, "Interrupted while waiting for computer to be offline: " + e);
+            int attempts = 0;
+            while (true) {
+                attempts++;
+
+                taskListener.getLogger().println("Connecting agent client.");
+
+                // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
+                try {
+                    slaveLauncher.getDelegate().launch(this, taskListener);
+                } catch (IOException e) {
+                    taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(VirtualMachineSlaveComputer.class.getName()).log(Level.SEVERE, null, ex);
                 }
-            } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Error closing channel: " + e);
+
+                if (this.isOnline()) {
+                    break;
+                } else if (attempts >= slaveLauncher.getTimesToRetryOnFailure()) {
+                    taskListener.getLogger().println("Maximum retries reached. Failed to start agent client.");
+                    break;
+                }
+
+                taskListener.getLogger().println("Not up yet, waiting for " + slaveLauncher.getWaitTimeMs() + "ms more ("
+                                                 + attempts + "/" + slaveLauncher.getTimesToRetryOnFailure() + " retries)...");
+                Thread.sleep(slaveLauncher.getWaitTimeMs());
             }
-        } catch (InterruptedException e) {
-            LOGGER.log(Level.SEVERE, "Interrupted while syncing IO: " + e);
-        } catch (NullPointerException e) {
-            LOGGER.log(Level.SEVERE, "Could not determine channel.");
+        } catch (VirtException e) {
+                LOGGER.log(Level.SEVERE, "Can't get VM domains: " + e);
+        } catch (InterruptedException ex) {
+            Logger.getLogger(VirtualMachineSlaveComputer.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
-    // since we will revert on taskAccepted, we don't need this anymore.
     @Override
     public Future<?> disconnect(OfflineCause cause) {
         String reason = "unknown";
