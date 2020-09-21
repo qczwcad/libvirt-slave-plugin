@@ -78,7 +78,7 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         }
         
         String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
-        this.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
+        super.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
         
         try {
             Map<String, IDomain> domains = hypervisor.getDomains();
