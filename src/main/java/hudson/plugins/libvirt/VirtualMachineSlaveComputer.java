@@ -57,10 +57,13 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
     
     @Override
     public void taskAccepted(Executor executor, Queue.Task task) {
+        taskListener.getLogger().flush();
         LOGGER.log(Level.INFO, "taskAccepted called");
+        taskListener.getLogger().println("taskAccepted called");
         Node node = executor.getOwner().getNode();
         LOGGER.log(Level.INFO, "Node: {0}", node.getDisplayName());
         LOGGER.log(Level.INFO, "Task: {0}", task.getFullDisplayName());
+        taskListener.getLogger().println("Task: " + task.getFullDisplayName());
         
         VirtualMachineSlave slave = (VirtualMachineSlave) node;
         
@@ -73,20 +76,26 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         try {
             hypervisor = slaveLauncher.findOurHypervisorInstance();
         } catch (VirtException e) {
-            LOGGER.log(Level.SEVERE, "reverting " + vmName + " to " + snapshotName + " failed: " + e.getMessage());
+            taskListener.getLogger().println("reverting " + vmName + " to " + snapshotName + " failed: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "reverting {0} to {1} failed: {2}", new Object[]{vmName, snapshotName, e.getMessage()});
             return;
         }
         
         String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
         super.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
+        taskListener.getLogger().println("disconnect to revert");
         
         try {
             Map<String, IDomain> domains = hypervisor.getDomains();
             IDomain domain = domains.get(vmName);
             IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
+            taskListener.getLogger().println("revert to snapshot: " + snapshotName + " and start");
             domain.revertToSnapshot(snapshot);
-                    
+            
+            taskListener.getLogger().println("Starting, waiting for " + slaveLauncher.getWaitTimeMs() + "ms to let it fully boot up...");
             Thread.sleep(slaveLauncher.getWaitTimeMs());
+            
+            taskListener.getLogger().flush();
 
             int attempts = 0;
             while (true) {
@@ -97,10 +106,10 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                 // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
                 try {
                     slaveLauncher.getDelegate().launch(this, taskListener);
-                } catch (IOException e) {
-                    taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
-                } catch (InterruptedException ex) {
-                    Logger.getLogger(VirtualMachineSlaveComputer.class.getName()).log(Level.SEVERE, null, ex);
+                } catch (IOException | InterruptedException e) {
+                    if (attempts >= slaveLauncher.getTimesToRetryOnFailure()) {
+                        taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
+                    }
                 }
 
                 if (this.isOnline()) {
@@ -113,11 +122,13 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                 taskListener.getLogger().println("Not up yet, waiting for " + slaveLauncher.getWaitTimeMs() + "ms more ("
                                                  + attempts + "/" + slaveLauncher.getTimesToRetryOnFailure() + " retries)...");
                 Thread.sleep(slaveLauncher.getWaitTimeMs());
+                taskListener.getLogger().flush();
             }
         } catch (VirtException e) {
-                LOGGER.log(Level.SEVERE, "Can't get VM domains: " + e);
+            taskListener.getLogger().println("Can't get VM domains: " + e);
+            LOGGER.log(Level.SEVERE, "Can''t get VM domains: {0}", e);
         } catch (InterruptedException ex) {
-            Logger.getLogger(VirtualMachineSlaveComputer.class.getName()).log(Level.SEVERE, null, ex);
+            taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + ex.getMessage());
         }
     }
 

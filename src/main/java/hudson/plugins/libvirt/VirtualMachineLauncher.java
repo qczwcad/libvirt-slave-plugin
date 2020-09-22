@@ -144,8 +144,6 @@ public class VirtualMachineLauncher extends ComputerLauncher {
             IDomain domain = computers.get(virtualMachine.getName());
             if (domain != null) {
                 if (domain.isNotBlockedAndNotRunning()) {
-                    taskListener.getLogger().println("Starting, waiting for " + waitTimeMs + "ms to let it fully boot up...");
-                    //domain.create();
                     
                     //Reverting to the snapshot configured before the real lauching.
                     Node node = slaveComputer.getNode();
@@ -154,6 +152,8 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                     IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
                     taskListener.getLogger().println("Reverting " + slaveComputer.getDisplayName() + " to snapshot " + snapshotName + ".");
                     domain.revertToSnapshot(snapshot);
+                    
+                    taskListener.getLogger().println("Starting, waiting for " + waitTimeMs + "ms to let it fully boot up...");
                     
                     Thread.sleep(waitTimeMs);
 
@@ -166,8 +166,10 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                         // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
                         try {
                             delegate.launch(slaveComputer, taskListener);
-                        } catch (IOException e) {
-                            taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
+                        } catch (IOException | InterruptedException e) {
+                            if (attempts >= getTimesToRetryOnFailure()) {
+                                taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
+                            }
                         }
 
                         if (slaveComputer.isOnline()) {
