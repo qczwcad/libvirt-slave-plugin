@@ -88,12 +88,17 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         try {
             Map<String, IDomain> domains = hypervisor.getDomains();
             IDomain domain = domains.get(vmName);
-            IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
-            taskListener.getLogger().println("revert to snapshot: " + snapshotName + " and start");
-            domain.revertToSnapshot(snapshot);
-            
-            taskListener.getLogger().println("Starting, waiting for " + slaveLauncher.getWaitTimeMs() + "ms to let it fully boot up...");
-            Thread.sleep(slaveLauncher.getWaitTimeMs());
+            if (!snapshotName.isEmpty()) {
+                IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
+                taskListener.getLogger().println("revert to snapshot: " + snapshotName + " and start");
+                domain.revertToSnapshot(snapshot);
+
+                taskListener.getLogger().println("Starting, waiting for " + slaveLauncher.getWaitTimeMs() + "ms to let it fully boot up...");
+                Thread.sleep(slaveLauncher.getWaitTimeMs());
+            } else {
+                // If the user leaves the snapshot field empty.
+                domain.create();
+            }
             
             taskListener.getLogger().flush();
 
@@ -102,7 +107,7 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                 attempts++;
 
                 taskListener.getLogger().println("Connecting agent client.");
-
+                
                 // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
                 try {
                     slaveLauncher.getDelegate().launch(this, taskListener);

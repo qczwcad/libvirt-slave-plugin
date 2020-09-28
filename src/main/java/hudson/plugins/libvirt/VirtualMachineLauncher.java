@@ -149,13 +149,17 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                     Node node = slaveComputer.getNode();
                     VirtualMachineSlave slave = (VirtualMachineSlave) node;
                     String snapshotName = slave.getSnapshotName();
-                    IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
-                    taskListener.getLogger().println("Reverting " + slaveComputer.getDisplayName() + " to snapshot " + snapshotName + ".");
-                    domain.revertToSnapshot(snapshot);
-                    
-                    taskListener.getLogger().println("Starting, waiting for " + waitTimeMs + "ms to let it fully boot up...");
-                    
-                    Thread.sleep(waitTimeMs);
+                    if (!snapshotName.isEmpty()) {
+                        IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
+                        taskListener.getLogger().println("Reverting " + slaveComputer.getDisplayName() + " to snapshot " + snapshotName + ".");
+                        domain.revertToSnapshot(snapshot);
+
+                        taskListener.getLogger().println("Starting, waiting for " + waitTimeMs + "ms to let it fully boot up...");
+
+                        Thread.sleep(waitTimeMs);
+                    } else {
+                        domain.create();
+                    }
 
                     int attempts = 0;
                     while (true) {
