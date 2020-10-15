@@ -81,9 +81,11 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
             return;
         }
         
-        String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
-        super.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
-        taskListener.getLogger().println("disconnect to revert");
+        if (!snapshotName.isEmpty()) {
+            String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
+            super.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
+            taskListener.getLogger().println("disconnect to revert");
+        }
         
         try {
             Map<String, IDomain> domains = hypervisor.getDomains();
@@ -97,7 +99,9 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                 Thread.sleep(slaveLauncher.getWaitTimeMs());
             } else {
                 // If the user leaves the snapshot field empty.
-                domain.create();
+                if (domain.isNotBlockedAndNotRunning()) {
+                    domain.create();
+                }
             }
             
             taskListener.getLogger().flush();
