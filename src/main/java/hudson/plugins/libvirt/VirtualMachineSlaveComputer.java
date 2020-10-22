@@ -81,10 +81,30 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
             return;
         }
         
+        while (true)
+        {
+            if (slave.getLaunchLoopExited())
+            {
+                taskListener.getLogger().println("our launcher has exited the launching loop");
+                break;
+            }
+            else {
+                try {
+                    taskListener.getLogger().println("waiting for " + slaveLauncher.getWaitTimeMs() + "ms  more for our launcher to exit the launching loop...");
+                    Thread.sleep(slaveLauncher.getWaitTimeMs());
+                    taskListener.getLogger().flush();
+                }
+                catch (InterruptedException ex) {
+                    taskListener.getLogger().println("unexpectedly caught exception when waiting for our launcher to exit the launching loop: " + ex.getMessage());
+                }
+            }
+        }
+            
         if (!snapshotName.isEmpty()) {
-            String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
-            super.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
             taskListener.getLogger().println("disconnect to revert");
+            taskListener.getLogger().flush();
+            String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
+            this.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
         }
         
         try {
@@ -128,7 +148,7 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                     break;
                 }
 
-                taskListener.getLogger().println("Not up yet, waiting for " + slaveLauncher.getWaitTimeMs() + "ms more ("
+                taskListener.getLogger().println("after reverting, not up yet, waiting for " + slaveLauncher.getWaitTimeMs() + "ms more ("
                                                  + attempts + "/" + slaveLauncher.getTimesToRetryOnFailure() + " retries)...");
                 Thread.sleep(slaveLauncher.getWaitTimeMs());
                 taskListener.getLogger().flush();
@@ -141,7 +161,7 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         }
     }
 
-    @Override
+     @Override
     public Future<?> disconnect(OfflineCause cause) {
         String reason = "unknown";
         if (cause != null) {
