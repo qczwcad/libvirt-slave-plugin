@@ -1,0 +1,1 @@
+1. revert to specific snapshot on task accepted.
