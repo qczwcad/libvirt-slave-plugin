@@ -53,7 +53,7 @@ public class LibVirtDomainImpl implements IDomain {
         try {
             DomainSnapshot snapshot = ((LibVirtDomainSnapshotImpl) ds).getSnapshot();
             domain.revertToSnapshot(snapshot);
-            domain.create();
+            domain.create(); // in case the vm is down
         } catch (LibvirtException e) {
             throw new VirtException(e);
         }
