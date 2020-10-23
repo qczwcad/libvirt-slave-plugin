@@ -27,7 +27,7 @@ public class VirtualMachineSlaveTest {
   private static final String USER_AND_PASSWORD = "test:11305126df83172cd52b9f2bb0d26e054c";
   
   private static String getLastBuildURL() throws IOException {
-    String response = sendHttpGetRequestToURL("http://192.168.51.136:8080/job/SmokeTestingJenkins/api/json");
+    String response = sendHttpGetRequestToURL(JOB_URL);
     try {
       Object jobj = (new JSONParser()).parse(response);
       JSONObject jo = (JSONObject)jobj;
@@ -44,8 +44,8 @@ public class VirtualMachineSlaveTest {
     URL obj = new URL(URLString);
     HttpURLConnection httpURLConnection = (HttpURLConnection)obj.openConnection();
     httpURLConnection.setRequestMethod("GET");
-    httpURLConnection.setRequestProperty("User-Agent", "Mozilla/5.0");
-    byte[] authEncBytes = Base64.encodeBase64("test:11305126df83172cd52b9f2bb0d26e054c".getBytes());
+    httpURLConnection.setRequestProperty("User-Agent", USER_AGENT);
+    byte[] authEncBytes = Base64.encodeBase64(USER_AND_PASSWORD.getBytes());
     String authStringEnc = new String(authEncBytes);
     httpURLConnection.setRequestProperty("Authorization", "Basic " + authStringEnc);
     int responseCode = httpURLConnection.getResponseCode();
@@ -64,7 +64,7 @@ public class VirtualMachineSlaveTest {
   }
   
   private static String getHealthScore() throws IOException {
-    String response = sendHttpGetRequestToURL("http://192.168.51.136:8080/job/SmokeTestingJenkins/api/json");
+    String response = sendHttpGetRequestToURL(JOB_URL);
     try {
       Object jobj = (new JSONParser()).parse(response.toString());
       JSONObject jo = (JSONObject)jobj;
@@ -104,13 +104,13 @@ public class VirtualMachineSlaveTest {
   }
   
   private static void sendPOST() throws IOException {
-    URL obj = new URL("http://192.168.51.136:8080/generic-webhook-trigger/invoke?token=SmokeTestingJenkins");
+    URL obj = new URL(POST_URL);
     HttpURLConnection httpURLConnection = (HttpURLConnection)obj.openConnection();
     httpURLConnection.setRequestMethod("POST");
-    httpURLConnection.setRequestProperty("User-Agent", "Mozilla/5.0");
+    httpURLConnection.setRequestProperty("User-Agent", USER_AGENT);
     httpURLConnection.setDoOutput(true);
     OutputStream os = httpURLConnection.getOutputStream();
-    os.write("userName=Ramesh&password=Pass@123".getBytes());
+    os.write(POST_PARAM.getBytes());
     os.flush();
     os.close();
     int responseCode = httpURLConnection.getResponseCode();
