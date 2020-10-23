@@ -12,8 +12,8 @@ import org.apache.commons.net.util.Base64;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
-import org.testng.Assert;
-import org.testng.annotations.Test;
+import org.junit.Test;
+import org.junit.Assert;
 
 public class VirtualMachineSlaveTest {
   private static final String USER_AGENT = "Mozilla/5.0";
