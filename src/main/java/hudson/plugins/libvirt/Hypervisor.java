@@ -25,25 +25,25 @@ package hudson.plugins.libvirt;
 import com.cloudbees.jenkins.plugins.sshcredentials.SSHAuthenticator;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
-import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
-import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
-import com.cloudbees.plugins.credentials.domains.DomainRequirement;
-import com.cloudbees.plugins.credentials.domains.HostnamePortRequirement;
+import com.cloudbees.plugins.credentials.common.StandardCredentials;
+import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
+import com.cloudbees.plugins.credentials.domains.URIRequirementBuilder;
 import com.google.common.base.Strings;
 import com.trilead.ssh2.Connection;
 import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
-import hudson.model.ItemGroup;
+import hudson.model.Item;
 import hudson.model.Label;
+import hudson.model.Queue;
+import hudson.model.queue.Tasks;
 import hudson.plugins.libvirt.lib.ConnectionBuilder;
 import hudson.plugins.libvirt.lib.IConnect;
 import hudson.plugins.libvirt.lib.IDomain;
 import hudson.plugins.libvirt.lib.VirtException;
 import static hudson.plugins.libvirt.util.Consts.SSH_PORT;
 import hudson.security.ACL;
-import hudson.security.AccessControlled;
 import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.FormValidation;
@@ -64,11 +64,14 @@ import javax.servlet.ServletException;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
+import org.acegisecurity.Authentication;
+import org.apache.commons.lang.StringUtils;
 
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.verb.POST;
 
 /**
  * Represents a virtual datacenter.
@@ -86,14 +89,13 @@ public class Hypervisor extends Cloud {
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
     private transient IConnect connection;
-    private final boolean useNativeJavaConnection;
     private final String credentialsId;
 
     @DataBoundConstructor
     public Hypervisor(String hypervisorType, String hypervisorHost,
                       int hypervisorSshPort, String hypervisorSystemUrl,
                       String username, int maxOnlineSlaves,
-                      boolean useNativeJavaConnection, String credentialsId) {
+                      String credentialsId) {
         super("Hypervisor(libvirt)");
         this.hypervisorType = hypervisorType;
         this.hypervisorHost = hypervisorHost;
@@ -103,7 +105,7 @@ public class Hypervisor extends Cloud {
             this.hypervisorSystemUrl = "system";
         }
 
-	if (hypervisorSshPort > 0) {
+        if (hypervisorSshPort > 0) {
             this.hypervisorSshPort = hypervisorSshPort;
         } else {
             this.hypervisorSshPort = SSH_PORT;
@@ -111,7 +113,6 @@ public class Hypervisor extends Cloud {
 
         this.username = username;
         this.maxOnlineSlaves = maxOnlineSlaves;
-        this.useNativeJavaConnection = useNativeJavaConnection;
         this.credentialsId = credentialsId;
     }
 
@@ -128,8 +129,7 @@ public class Hypervisor extends Cloud {
                 .withCredentials(lookupSystemCredentials(credentialsId))
                 .hypervisorHost(hypervisorHost)
                 .hypervisorPort(hypervisorSshPort)
-                .hypervisorSysUrl(hypervisorSystemUrl)
-                .useNativeJava(useNativeJavaConnection);
+                .hypervisorSysUrl(hypervisorSystemUrl);
     }
 
     private synchronized IConnect getOrCreateConnection() throws VirtException {
@@ -199,10 +199,6 @@ public class Hypervisor extends Cloud {
 
     public String getUsername() {
         return username;
-    }
-
-    public boolean isUseNativeJavaConnection() {
-        return useNativeJavaConnection;
     }
 
     public String getCredentialsId() {
@@ -413,13 +409,13 @@ public class Hypervisor extends Cloud {
         return (DescriptorImpl) super.getDescriptor();
     }
 
-    public static StandardUsernameCredentials lookupSystemCredentials(String credentialsId) {
+    public static StandardCredentials lookupSystemCredentials(String credentialsId) {
         if (Strings.isNullOrEmpty(credentialsId)) {
             return null;
         }
         return CredentialsMatchers.firstOrNull(
                 CredentialsProvider
-                        .lookupCredentials(StandardUsernameCredentials.class,
+                        .lookupCredentials(StandardCredentials.class,
                                            Jenkins.get(), ACL.SYSTEM,
                                 new SchemeRequirement("ssh")),
                 CredentialsMatchers.withId(credentialsId)
@@ -455,46 +451,97 @@ public class Hypervisor extends Cloud {
             return super.configure(req, o);
         }
 
-        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup<?> ctx,
-                @QueryParameter String host,
-                @QueryParameter String port,
-                @QueryParameter String value) {
-            AccessControlled context;
+        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath Item context,
+                                                     @QueryParameter String hypervisorType,
+                                                     @QueryParameter String hypervisorHost,
+                                                     @QueryParameter String hypervisorSshPort,
+                                                     @QueryParameter String username,
+                                                     @QueryParameter String hypervisorSystemUrl,
+                                                     @QueryParameter String credentialsId) {
+            StandardListBoxModel model = new StandardListBoxModel();
 
-            if (ctx instanceof AccessControlled) {
-                context = (AccessControlled) ctx;
+            if (context == null && !Jenkins.get().hasPermission(Jenkins.ADMINISTER)) {
+                LOGGER.log(Level.INFO, "no Jenkins.ADMINISTER permissions");
+
+                return model.includeCurrentValue(credentialsId);
+            }
+
+            if (context != null && !context.hasPermission(Computer.CONFIGURE)) {
+                LOGGER.log(Level.INFO, "no Computer.CONFIGURE permissions");
+
+                return model.includeCurrentValue(credentialsId);
+            }
+
+            ConnectionBuilder builder = ConnectionBuilder.newBuilder()
+                        .hypervisorType(hypervisorType)
+                        .userName(username)
+                        .withCredentials(lookupSystemCredentials(credentialsId))
+                        .hypervisorHost(hypervisorHost)
+                        .hypervisorPort(Integer.parseInt(hypervisorSshPort))
+                        .hypervisorSysUrl(hypervisorSystemUrl);
+
+            String hypervisorUri = builder.constructHypervisorURI();
+
+            Authentication auth;
+            if (context instanceof Queue.Task) {
+                auth = Tasks.getAuthenticationOf((Queue.Task) context);
             } else {
-                context = Jenkins.get();
+                auth = ACL.SYSTEM;
             }
-
-            if (!context.hasPermission(Computer.CONFIGURE)) {
-                return new StandardUsernameListBoxModel()
-                        .includeCurrentValue(value);
-            }
-
-            try {
-                int portValue = Integer.parseInt(port);
-                return new StandardUsernameListBoxModel()
-                        .includeMatchingAs(ACL.SYSTEM,
-                                Jenkins.get(),
-                                StandardUsernameCredentials.class,
-                                Collections.<DomainRequirement>singletonList(
-                                        new HostnamePortRequirement(host, portValue)
-                                ),
-                                SSHAuthenticator.matcher(Connection.class))
-                        .includeCurrentValue(value);
-            } catch (NumberFormatException ex) {
-                return new StandardUsernameListBoxModel()
-                        .includeCurrentValue(value);
-            }
+            return model
+                    .includeEmptyValue()
+                    .includeMatchingAs(
+                        auth,
+                        context,
+                        StandardCredentials.class,
+                        URIRequirementBuilder.fromUri(hypervisorUri).build(),
+                        CredentialsMatchers.anyOf(
+                                CredentialsMatchers.instanceOf(StandardCredentials.class),
+                                SSHAuthenticator.matcher(Connection.class)
+                        ))
+                    .includeCurrentValue(credentialsId);
         }
 
+        public FormValidation doCheckCredentialsId(@AncestorInPath Item item,
+                                                   @QueryParameter String hypervisorType,
+                                                   @QueryParameter String hypervisorHost,
+                                                   @QueryParameter String hypervisorSshPort,
+                                                   @QueryParameter String username,
+                                                   @QueryParameter String hypervisorSystemUrl,
+                                                   @QueryParameter String credentialsId) {
+
+            if (item == null) {
+                if (!Jenkins.get().hasPermission(Jenkins.ADMINISTER)) {
+                    return FormValidation.ok();
+                }
+            } else {
+                if (!item.hasPermission(Item.EXTENDED_READ)
+                    && !item.hasPermission(CredentialsProvider.USE_ITEM)) {
+                    return FormValidation.ok();
+                }
+            }
+
+            if (StringUtils.isBlank(credentialsId)) {
+                return FormValidation.ok();
+            }
+
+            if (credentialsId.startsWith("${") && credentialsId.endsWith("}")) {
+                return FormValidation.warning("Cannot validate expression based credentials");
+            }
+
+            if (lookupSystemCredentials(credentialsId) == null) {
+                return FormValidation.error("Cannot find currently selected credentials");
+            }
+
+            return FormValidation.ok();
+        }
+
+        @POST
         public FormValidation doTestConnection(@QueryParameter String hypervisorType,
                                                @QueryParameter String hypervisorHost,
                                                @QueryParameter String hypervisorSshPort,
                                                @QueryParameter String username,
                                                @QueryParameter String hypervisorSystemUrl,
-                                               @QueryParameter boolean useNativeJavaConnection,
                                                @QueryParameter String credentialsId)
                 throws Exception, ServletException {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
@@ -513,8 +560,7 @@ public class Hypervisor extends Cloud {
                         .withCredentials(lookupSystemCredentials(credentialsId))
                         .hypervisorHost(hypervisorHost)
                         .hypervisorPort(Integer.parseInt(hypervisorSshPort))
-                        .hypervisorSysUrl(hypervisorSystemUrl)
-                        .useNativeJava(useNativeJavaConnection);
+                        .hypervisorSysUrl(hypervisorSystemUrl);
 
                 String hypervisorUri = builder.constructHypervisorURI();
 
