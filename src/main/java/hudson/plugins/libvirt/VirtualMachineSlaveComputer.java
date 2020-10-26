@@ -80,25 +80,6 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
             LOGGER.log(Level.SEVERE, "reverting {0} to {1} failed: {2}", new Object[]{vmName, snapshotName, e.getMessage()});
             return;
         }
-        
-        while (true)
-        {
-            if (slave.getLaunchLoopExited())
-            {
-                taskListener.getLogger().println("our launcher has exited the launching loop");
-                break;
-            }
-            else {
-                try {
-                    taskListener.getLogger().println("waiting for " + slaveLauncher.getWaitTimeMs() + "ms  more for our launcher to exit the launching loop...");
-                    Thread.sleep(slaveLauncher.getWaitTimeMs());
-                    taskListener.getLogger().flush();
-                }
-                catch (InterruptedException ex) {
-                    taskListener.getLogger().println("unexpectedly caught exception when waiting for our launcher to exit the launching loop: " + ex.getMessage());
-                }
-            }
-        }
             
         if (!snapshotName.isEmpty()) {
             taskListener.getLogger().println("disconnect to revert");
@@ -134,7 +115,10 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                 
                 // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
                 try {
-                    slaveLauncher.getDelegate().launch(this, taskListener);
+                    if (!this.isOnline())
+                    {
+                        slaveLauncher.getDelegate().launch(this, taskListener);
+                    }
                 } catch (IOException | InterruptedException e) {
                     if (attempts >= slaveLauncher.getTimesToRetryOnFailure()) {
                         taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());

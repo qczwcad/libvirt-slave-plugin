@@ -62,7 +62,6 @@ public class VirtualMachineSlave extends Slave {
     private final boolean     rebootAfterRun;
     private final int         startupTimesToRetryOnFailure;
     private final String      beforeJobSnapshotName;
-    private boolean     launchLoopExited;
 
     @DataBoundConstructor
     public VirtualMachineSlave(String name, String nodeDescription, String remoteFS,
@@ -104,21 +103,8 @@ public class VirtualMachineSlave extends Slave {
         this.rebootAfterRun = rebootAfterRun;
         this.startupTimesToRetryOnFailure = startupTimesToRetryOnFailure;
         this.beforeJobSnapshotName = beforeJobSnapshotName;
-        this.launchLoopExited = true;
     }
 
-    public void setLaunchLoopExited() {
-        this.launchLoopExited = false;
-    }
-    
-    public void setLaunchLoopExited(boolean v) {
-        this.launchLoopExited = v;
-    }
-    
-    public boolean getLaunchLoopExited() {
-        return this.launchLoopExited;
-    }
-    
     public String getHypervisorDescription() {
         return hypervisorDescription;
     }

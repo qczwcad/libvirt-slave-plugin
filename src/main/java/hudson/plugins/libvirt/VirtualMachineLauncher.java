@@ -160,10 +160,7 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                     } else {
                         domain.create();
                     }
-
-                    // restore the launcher loop status.
-                    slave.setLaunchLoopExited();
-                    
+  
                     int attempts = 0;
                     while (true) {
                         attempts++;
@@ -172,7 +169,10 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                         
                         // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
                         try {
-                            delegate.launch(slaveComputer, taskListener);
+                            if (!slaveComputer.isOnline())
+                            {
+                                delegate.launch(slaveComputer, taskListener);
+                            }
                         } catch (IOException | InterruptedException e) {
                             if (attempts >= getTimesToRetryOnFailure()) {
                                 taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
@@ -182,7 +182,6 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                         if (slaveComputer.isOnline()) {
                             taskListener.getLogger().println("slaveComputer is online");
                             taskListener.getLogger().flush();
-                            slave.setLaunchLoopExited(true);
                             break;
                         } else if (attempts >= timesToRetryOnFailure) {
                             taskListener.getLogger().println("Maximum retries reached. Failed to start agent client.");
@@ -197,7 +196,7 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                     taskListener.getLogger().println("Already running, no startup required.");
                     
                     taskListener.getLogger().println("Connecting agent client.");
-                    delegate.launch(slaveComputer, taskListener);          
+                    delegate.launch(slaveComputer, taskListener);      
                 }
             } else {
                 throw new IOException("VM \"" + virtualMachine.getName() + "\" (agent title \"" + slaveComputer.getDisplayName() + "\") not found!");
