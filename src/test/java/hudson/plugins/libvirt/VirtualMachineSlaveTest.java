@@ -18,14 +18,20 @@ import org.junit.Assert;
 public class VirtualMachineSlaveTest {
 
     private static final String USER_AGENT = "Mozilla/5.0";
+    
+    private static final String HOST = "192.168.11.101";
+    
+    private static final String PORT = "8080";
 
-    private static final String POST_URL = "http://192.168.11.102:8080/generic-webhook-trigger/invoke?token=SmokeTestingJenkins";
+    private static final String POST_URL = "http://" + HOST + ":" + PORT + "/generic-webhook-trigger/invoke?token=SmokeTestingJenkins";
 
-    private static final String JOB_URL = "http://192.168.11.102:8080/job/SmokeTestingJenkins/api/json";
+    private static final String JOB_URL = "http://" + HOST + ":" + PORT + "/job/SmokeTestingJenkins/api/json";
+    
+    private static final String NextBuildNumberURL = "http://" + HOST + ":" + PORT + "/job/SmokeTestingJenkins/nextbuildnumber/submit";
 
     private static final String POST_PARAM = "userName=Ramesh&password=Pass@123";
 
-    private static final String USER_AND_PASSWORD = "test:11305126df83172cd52b9f2bb0d26e054c";
+    private static final String USER_AND_PASSWORD = "test:11660dfbbb8ad9a2e60e860fdabc962a8d";
 
     private static String getLastBuildURL() throws IOException {
         String response = sendHttpGetRequestToURL(JOB_URL);
@@ -39,6 +45,10 @@ public class VirtualMachineSlaveTest {
             System.out.println(e.getMessage());
             return new String("");
         }
+    }
+    
+    private static String getBuildURL(long buildNumber) {
+        return "http://" + HOST + ":" + PORT + "/job/SmokeTestingJenkins/" + String.valueOf(buildNumber) + "/api/json";
     }
 
     private static String sendHttpGetRequestToURL(String URLString) throws IOException {
@@ -88,6 +98,24 @@ public class VirtualMachineSlaveTest {
         }
     }
 
+    private static boolean isBuildBuilding(long buildNumber) {
+        try {
+            String buildURL = getBuildURL(buildNumber);
+            String response = sendHttpGetRequestToURL(buildURL);
+            Object jobj = (new JSONParser()).parse(response);
+            JSONObject jo = (JSONObject) jobj;
+            String vString = jo.get("building").toString();
+            System.out.println(vString);
+            if (vString.equalsIgnoreCase("true")) {
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+    
     private static boolean isLastBuildBuilding() {
         try {
             String lastBuildURL = getLastBuildURL();
@@ -106,19 +134,23 @@ public class VirtualMachineSlaveTest {
         }
     }
 
-    private static void sendPOST() throws IOException {
-        URL obj = new URL(POST_URL);
+    private static String sendHttpPostRequestToURL(String URLString, byte data[]) throws IOException {
+        URL obj = new URL(URLString);
+        HttpURLConnection.setFollowRedirects(false);
         HttpURLConnection httpURLConnection = (HttpURLConnection) obj.openConnection();
         httpURLConnection.setRequestMethod("POST");
         httpURLConnection.setRequestProperty("User-Agent", USER_AGENT);
+        byte[] authEncBytes = Base64.encodeBase64(USER_AND_PASSWORD.getBytes());
+        String authStringEnc = new String(authEncBytes);
+        httpURLConnection.setRequestProperty("Authorization", "Basic " + authStringEnc);
         httpURLConnection.setDoOutput(true);
         OutputStream os = httpURLConnection.getOutputStream();
-        os.write(POST_PARAM.getBytes());
+        os.write(data);
         os.flush();
         os.close();
         int responseCode = httpURLConnection.getResponseCode();
         System.out.println("POST Response Code :: " + responseCode);
-        if (responseCode == 200) {
+        if (responseCode == 200 || responseCode == 302) {
             BufferedReader in = new BufferedReader(new InputStreamReader(httpURLConnection.getInputStream()));
             StringBuffer response = new StringBuffer();
             String inputLine;
@@ -127,16 +159,29 @@ public class VirtualMachineSlaveTest {
             }
             in.close();
             System.out.println(response.toString());
+            return response.toString();
         } else {
             System.out.println("POST request not worked");
         }
+        return "";
+    }
+    
+    private static long triggerANewBuild() throws IOException {
+        long ts = System.currentTimeMillis()/1000;
+        sendHttpPostRequestToURL(NextBuildNumberURL, ("nextBuildNumber=" + String.valueOf(ts)).getBytes());
+        sendHttpPostRequestToURL(POST_URL, POST_PARAM.getBytes());
+        return ts;
     }
 
     @Test
     public void testWhenVmIsDown() throws Exception {
         for (int i = 0; i < 5; i++) {
-            sendPOST();
-            Thread.sleep(7000L);
+            long nextBuildNumber = triggerANewBuild();
+            while (!isBuildBuilding(nextBuildNumber))
+            {
+                System.out.printf("Waiting the job %d to be started\n", nextBuildNumber);
+                Thread.sleep(1000L);
+            }
         }
         int timeElapsed = 0;
         while (isLastBuildBuilding()) {
@@ -147,5 +192,6 @@ public class VirtualMachineSlaveTest {
         }
         String healthScore = getHealthScore();
         Assert.assertTrue(healthScore.equalsIgnoreCase("100"));
-    }
+    } 
+    
 }
