@@ -82,10 +82,13 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         }
             
         if (!snapshotName.isEmpty()) {
-            taskListener.getLogger().println("disconnect to revert");
-            taskListener.getLogger().flush();
-            String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
-            this.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
+            if (this.isOnline())
+            {
+                taskListener.getLogger().println("disconnect to revert");
+                taskListener.getLogger().flush();
+                String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
+                this.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
+            }
         }
         
         try {

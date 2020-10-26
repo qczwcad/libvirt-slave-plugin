@@ -142,48 +142,17 @@ public class VirtualMachineLauncher extends ComputerLauncher {
 
             Map<String, IDomain> computers = virtualMachine.getHypervisor().getDomains();
             IDomain domain = computers.get(virtualMachine.getName());
+            Node node = slaveComputer.getNode();
+            VirtualMachineSlave slave = (VirtualMachineSlave) node;
+            String snapshotName = slave.getSnapshotName();
             if (domain != null) {
                 if (domain.isNotBlockedAndNotRunning()) {
-                    
-                    //Reverting to the snapshot configured before the real lauching.
-                    Node node = slaveComputer.getNode();
-                    VirtualMachineSlave slave = (VirtualMachineSlave) node;
-                    String snapshotName = slave.getSnapshotName();
-                    if (!snapshotName.isEmpty()) {
-                        IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
-                        taskListener.getLogger().println("Reverting " + slaveComputer.getDisplayName() + " to snapshot " + snapshotName + ".");
-                        domain.revertToSnapshot(snapshot);
-                    
-                        taskListener.getLogger().println("Starting, waiting for " + waitTimeMs + "ms to let it fully boot up...");
-
-                        Thread.sleep(waitTimeMs);
-                    } else {
-                        domain.create();
-                    }
-  
+                    domain.create();
                     int attempts = 0;
-                    while (true) {
+                    while (domain.isNotBlockedAndNotRunning()) {
                         attempts++;
-
-                        taskListener.getLogger().println("Connecting agent client.");
-                        
-                        // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
-                        try {
-                            if (!slaveComputer.isOnline())
-                            {
-                                delegate.launch(slaveComputer, taskListener);
-                            }
-                        } catch (IOException | InterruptedException e) {
-                            if (attempts >= getTimesToRetryOnFailure()) {
-                                taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
-                            }
-                        }
-                        
-                        if (slaveComputer.isOnline()) {
-                            taskListener.getLogger().println("slaveComputer is online");
-                            taskListener.getLogger().flush();
-                            break;
-                        } else if (attempts >= timesToRetryOnFailure) {
+                                                
+                        if (attempts >= timesToRetryOnFailure) {
                             taskListener.getLogger().println("Maximum retries reached. Failed to start agent client.");
                             break;
                         }
@@ -194,10 +163,8 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                     }
                 } else {
                     taskListener.getLogger().println("Already running, no startup required.");
-                    
-                    taskListener.getLogger().println("Connecting agent client.");
-                    delegate.launch(slaveComputer, taskListener);      
                 }
+                slaveComputer.setAcceptingTasks(true);
             } else {
                 throw new IOException("VM \"" + virtualMachine.getName() + "\" (agent title \"" + slaveComputer.getDisplayName() + "\") not found!");
             }
