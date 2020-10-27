@@ -1,21 +1,15 @@
 /**
  *  Copyright (C) 2010, Byte-Code srl <http://www.byte-code.com>
- *  Copyright (C) 2012  Philipp Bartsch <tastybug@tastybug.com>
+ * Copyright (C) 2012 Philipp Bartsch <tastybug@tastybug.com>
  *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ * This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  * Date: Mar 04, 2010
+ *
  * @author Marco Mornati<mmornati@byte-code.com>
  * @author Philipp Bartsch <tastybug@tastybug.com>
  */
@@ -41,7 +35,6 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import org.kohsuke.stapler.DataBoundConstructor;
-
 
 public class VirtualMachineLauncher extends ComputerLauncher {
 
@@ -142,29 +135,56 @@ public class VirtualMachineLauncher extends ComputerLauncher {
 
             Map<String, IDomain> computers = virtualMachine.getHypervisor().getDomains();
             IDomain domain = computers.get(virtualMachine.getName());
-            Node node = slaveComputer.getNode();
-            VirtualMachineSlave slave = (VirtualMachineSlave) node;
-            String snapshotName = slave.getSnapshotName();
             if (domain != null) {
-                if (domain.isNotBlockedAndNotRunning()) {
-                    domain.create();
-                    int attempts = 0;
-                    while (domain.isNotBlockedAndNotRunning()) {
-                        attempts++;
-                                                
-                        if (attempts >= timesToRetryOnFailure) {
-                            taskListener.getLogger().println("Maximum retries reached. Failed to start agent client.");
+                if (domain.isRunningOrBlocked()) {
+                    domain.shutdown();
+                    // make sure the domain is off when we call domain.create() bellow.
+                    while (true)
+                    {
+                        if (domain.isRunningOrBlocked())
+                        {
+                            long waitTime = 3000L;
+                            System.out.printf("Domain is still running, let's wait for %d more seconds\n", waitTime / 1000);
+                            Thread.sleep(waitTime);
+                        }
+                        else {
                             break;
                         }
-
-                        taskListener.getLogger().println("Not up yet, waiting for " + waitTimeMs + "ms more ("
-                                                         + attempts + "/" + timesToRetryOnFailure + " retries)...");
-                        Thread.sleep(waitTimeMs);
                     }
-                } else {
-                    taskListener.getLogger().println("Already running, no startup required.");
                 }
-                slaveComputer.setAcceptingTasks(true);
+                domain.create();
+
+                int attempts = 0;
+                while (true) {
+                    attempts++;
+
+                    taskListener.getLogger().println("Connecting agent client.");
+
+                    // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
+                    try {
+                        if (!slaveComputer.isOnline()) {
+                            delegate.launch(slaveComputer, taskListener);
+                        }
+                    } catch (IOException | InterruptedException e) {
+                        if (attempts >= getTimesToRetryOnFailure()) {
+                            taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
+                        }
+                    }
+
+                    if (slaveComputer.isOnline()) {
+                        taskListener.getLogger().println("slaveComputer is online");
+                        taskListener.getLogger().flush();
+                        break;
+                    } else if (attempts >= timesToRetryOnFailure) {
+                        taskListener.getLogger().println("Maximum retries reached. Failed to start agent client.");
+                        break;
+                    }
+
+                    taskListener.getLogger().println("Not up yet, waiting for " + waitTimeMs + "ms more ("
+                            + attempts + "/" + timesToRetryOnFailure + " retries)...");
+                    Thread.sleep(waitTimeMs);
+                }
+
             } else {
                 throw new IOException("VM \"" + virtualMachine.getName() + "\" (agent title \"" + slaveComputer.getDisplayName() + "\") not found!");
             }

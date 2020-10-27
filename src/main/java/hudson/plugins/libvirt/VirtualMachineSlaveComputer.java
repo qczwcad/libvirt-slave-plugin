@@ -55,100 +55,103 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
         this.taskListener = new StreamTaskListener(new RewindableRotatingFileOutputStream(getLogFile(), 10));
     }
     
-    @Override
-    public void taskAccepted(Executor executor, Queue.Task task) {
-        taskListener.getLogger().flush();
-        LOGGER.log(Level.INFO, "taskAccepted called");
-        taskListener.getLogger().println("taskAccepted called");
-        Node node = executor.getOwner().getNode();
-        LOGGER.log(Level.INFO, "Node: {0}", node.getDisplayName());
-        LOGGER.log(Level.INFO, "Task: {0}", task.getFullDisplayName());
-        taskListener.getLogger().println("Task: " + task.getFullDisplayName());
-        
-        VirtualMachineSlave slave = (VirtualMachineSlave) node;
-        
+    private static void revertVMSnapshot(VirtualMachineSlave slave, String snapshotName, TaskListener listener) {
+        LOGGER.log(Level.INFO, "revertVMSnapshot");
         ComputerLauncher launcher = slave.getLauncher();
-        VirtualMachineLauncher slaveLauncher = (VirtualMachineLauncher) launcher;
-        String vmName = slaveLauncher.getVirtualMachineName();
+        if (launcher instanceof VirtualMachineLauncher) {
+
+            VirtualMachineLauncher slaveLauncher = (VirtualMachineLauncher) launcher;
+            String vmName = slaveLauncher.getVirtualMachineName();
+
+            LOGGER.log(Level.INFO, "Preparing to revert " + vmName + " to snapshot " + snapshotName + ".");
+
+            Hypervisor hypervisor = null;
+            try {
+                hypervisor = slaveLauncher.findOurHypervisorInstance();
+            } catch (VirtException e) {
+                LOGGER.log(Level.SEVERE, "reverting " + vmName + " to " + snapshotName + " failed: " + e.getMessage());
+                return;
+            }
+
+            try {
+                Map<String, IDomain> domains = hypervisor.getDomains();
+                IDomain domain = domains.get(vmName);
+
+                if (domain != null) {
+                    try {
+                        IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
+                        try {
+                            Computer computer = slave.getComputer();
+                            try {
+                                computer.getChannel().syncLocalIO();
+                                try {
+                                    computer.getChannel().close();
+                                    computer.disconnect(new OfflineCause.ByCLI("Stopping " + vmName + " to revert to snapshot " + snapshotName + "."));
+                                    try {
+                                        computer.waitUntilOffline();
+
+                                        LOGGER.log(Level.INFO, "Reverting " + vmName + " to snapshot " + snapshotName + ".");
+                                        domain.revertToSnapshot(snapshot);
+
+                                        LOGGER.log(Level.INFO, "Relaunching " + vmName + ".");
+                                        try {
+                                            launcher.launch(slave.getComputer(), listener);
+                                        } catch (IOException e) {
+                                            LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
+                                        } catch (InterruptedException e) {
+                                            LOGGER.log(Level.SEVERE, "Could not relaunch VM: " + e);
+                                        } catch (NullPointerException e) {
+                                            LOGGER.log(Level.SEVERE, "Could not determine node.");
+                                        }
+                                    } catch (InterruptedException e) {
+                                        LOGGER.log(Level.SEVERE, "Interrupted while waiting for computer to be offline: " + e);
+                                    }
+                                } catch (IOException e) {
+                                    LOGGER.log(Level.SEVERE, "Error closing channel: " + e);
+                                }
+                            } catch (InterruptedException e) {
+                                LOGGER.log(Level.SEVERE, "Interrupted while syncing IO: " + e);
+                            } catch (NullPointerException e) {
+                                LOGGER.log(Level.SEVERE, "Could not determine channel.");
+                            }
+                        } catch (VirtException e) {
+                            LOGGER.log(Level.SEVERE, "No snapshot named " + snapshotName + " for VM: " + e);
+                        }
+                    } catch (VirtException e) {
+                        LOGGER.log(Level.SEVERE, "No snapshot named " + snapshotName + " for VM: " + e);
+                    }
+                } else {
+                    LOGGER.log(Level.SEVERE, "No VM named " + vmName);
+                }
+            } catch (VirtException e) {
+                LOGGER.log(Level.SEVERE, "Can't get VM domains: " + e);
+            }
+        }
+    }    
+    
+    @Override
+    public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        super.taskCompleted(executor, task, durationMS);
+        Node node = this.getNode();
+        VirtualMachineSlave slave = (VirtualMachineSlave) node;
         String snapshotName = slave.getSnapshotName();
-        
-        Hypervisor hypervisor = null;
-        try {
-            hypervisor = slaveLauncher.findOurHypervisorInstance();
-        } catch (VirtException e) {
-            taskListener.getLogger().println("reverting " + vmName + " to " + snapshotName + " failed: " + e.getMessage());
-            LOGGER.log(Level.SEVERE, "reverting {0} to {1} failed: {2}", new Object[]{vmName, snapshotName, e.getMessage()});
-            return;
-        }
-            
         if (!snapshotName.isEmpty()) {
-            if (this.isOnline())
-            {
-                taskListener.getLogger().println("disconnect to revert");
-                taskListener.getLogger().flush();
-                String offlineMessage = Util.fixEmptyAndTrim("disconnect to revert");
-                this.disconnect(new OfflineCause.UserCause(User.current(), offlineMessage));
-            }
-        }
-        
-        try {
-            Map<String, IDomain> domains = hypervisor.getDomains();
-            IDomain domain = domains.get(vmName);
-            if (!snapshotName.isEmpty()) {
-                IDomainSnapshot snapshot = domain.snapshotLookupByName(snapshotName);
-                taskListener.getLogger().println("revert to snapshot: " + snapshotName + " and start");
-                domain.revertToSnapshot(snapshot);
-
-                taskListener.getLogger().println("Starting, waiting for " + slaveLauncher.getWaitTimeMs() + "ms to let it fully boot up...");
-                Thread.sleep(slaveLauncher.getWaitTimeMs());
-            } else {
-                // If the user leaves the snapshot field empty.
-                if (domain.isNotBlockedAndNotRunning()) {
-                    domain.create();
-                }
-            }
-            
-            taskListener.getLogger().flush();
-
-            int attempts = 0;
-            while (true) {
-                attempts++;
-
-                taskListener.getLogger().println("Connecting agent client.");
-                
-                // This call doesn't seem to actually throw anything, but we'll catch IOException just in case
-                try {
-                    if (!this.isOnline())
-                    {
-                        slaveLauncher.getDelegate().launch(this, taskListener);
-                    }
-                } catch (IOException | InterruptedException e) {
-                    if (attempts >= slaveLauncher.getTimesToRetryOnFailure()) {
-                        taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + e.getMessage());
-                    }
-                }
-
-                if (this.isOnline()) {
-                    break;
-                } else if (attempts >= slaveLauncher.getTimesToRetryOnFailure()) {
-                    taskListener.getLogger().println("Maximum retries reached. Failed to start agent client.");
-                    break;
-                }
-
-                taskListener.getLogger().println("after reverting, not up yet, waiting for " + slaveLauncher.getWaitTimeMs() + "ms more ("
-                                                 + attempts + "/" + slaveLauncher.getTimesToRetryOnFailure() + " retries)...");
-                Thread.sleep(slaveLauncher.getWaitTimeMs());
-                taskListener.getLogger().flush();
-            }
-        } catch (VirtException e) {
-            taskListener.getLogger().println("Can't get VM domains: " + e);
-            LOGGER.log(Level.SEVERE, "Can''t get VM domains: {0}", e);
-        } catch (InterruptedException ex) {
-            taskListener.getLogger().println("unexpectedly caught exception when delegating launch of agent: " + ex.getMessage());
+            revertVMSnapshot(slave, snapshotName, this.taskListener);
         }
     }
-
-     @Override
+    
+    @Override
+    public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        super.taskCompletedWithProblems(executor, task, durationMS, problems);
+        Node node = this.getNode();
+        VirtualMachineSlave slave = (VirtualMachineSlave) node;
+        String snapshotName = slave.getSnapshotName();
+        if (!snapshotName.isEmpty()) {
+            revertVMSnapshot(slave, snapshotName, this.taskListener);
+        }
+    }
+     
+    @Override
     public Future<?> disconnect(OfflineCause cause) {
         String reason = "unknown";
         if (cause != null) {

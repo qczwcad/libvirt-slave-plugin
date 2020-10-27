@@ -6,7 +6,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import org.apache.commons.net.util.Base64;
 import org.json.simple.JSONArray;
@@ -116,6 +118,24 @@ public class VirtualMachineSlaveTest {
         }
     }
     
+    private static boolean isBuildSuccessful(long buildNumber) {
+        try {
+            String buildURL = getBuildURL(buildNumber);
+            String response = sendHttpGetRequestToURL(buildURL);
+            Object jobj = (new JSONParser()).parse(response);
+            JSONObject jo = (JSONObject) jobj;
+            String vString = jo.get("result").toString();
+            System.out.println(vString);
+            if (vString.equalsIgnoreCase("SUCCESS")) {
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+    
     private static boolean isLastBuildBuilding() {
         try {
             String lastBuildURL = getLastBuildURL();
@@ -175,13 +195,17 @@ public class VirtualMachineSlaveTest {
 
     @Test
     public void testWhenVmIsDown() throws Exception {
-        for (int i = 0; i < 5; i++) {
+        int RUN_TIMES = 10;
+        List<Long> buildNumbers;
+        buildNumbers = new ArrayList<>();
+        for (int i = 0; i < RUN_TIMES; i++) {
             long nextBuildNumber = triggerANewBuild();
             while (!isBuildBuilding(nextBuildNumber))
             {
                 System.out.printf("Waiting the job %d to be started\n", nextBuildNumber);
                 Thread.sleep(1000L);
             }
+            buildNumbers.add(new Long(nextBuildNumber));
         }
         int timeElapsed = 0;
         while (isLastBuildBuilding()) {
@@ -192,6 +216,16 @@ public class VirtualMachineSlaveTest {
         }
         String healthScore = getHealthScore();
         Assert.assertTrue(healthScore.equalsIgnoreCase("100"));
+        
+        int nSuccessful = 0;
+        for (Long buildNumber : buildNumbers) {
+            if (isBuildSuccessful(buildNumber.longValue()))
+            {
+                nSuccessful++;
+            }
+        }
+        System.out.printf("Total: %d runs, %d of them are successful.\n", buildNumbers.size(), nSuccessful);
+        Assert.assertTrue(nSuccessful == buildNumbers.size());
     } 
     
 }
