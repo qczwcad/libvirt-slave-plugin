@@ -40,12 +40,14 @@ import java.util.logging.Logger;
 
 import javax.annotation.Nullable;
 import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletResponse;
 
 import jenkins.model.Jenkins;
 
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.verb.POST;
 
 public class PluginImpl extends Plugin {
 
@@ -110,7 +112,8 @@ public class PluginImpl extends Plugin {
             }
         });
     }
-
+    
+    @POST
     public FormValidation doCheckStartupWaitingPeriodSeconds(@QueryParameter String secsValue)
             throws IOException, ServletException {
         Jenkins.get().checkPermission(Jenkins.ADMINISTER);
@@ -129,6 +132,7 @@ public class PluginImpl extends Plugin {
         }
     }
 
+    @POST
     public FormValidation doCheckStartupTimesToRetryOnFailure(@QueryParameter String retriesValue)
             throws IOException, ServletException {
         Jenkins.get().checkPermission(Jenkins.ADMINISTER);
@@ -149,6 +153,12 @@ public class PluginImpl extends Plugin {
             throws IOException, ServletException {
         ListBoxModel m = new ListBoxModel();
         List<VirtualMachine> virtualMachines = null;
+        
+        if (!Jenkins.get().hasPermission(Jenkins.ADMINISTER)) {
+            rsp.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+        
         for (Cloud cloud : Jenkins.get().clouds) {
             if (cloud instanceof Hypervisor) {
                 Hypervisor hypervisor = (Hypervisor) cloud;
@@ -171,6 +181,12 @@ public class PluginImpl extends Plugin {
                                      @QueryParameter("hypervisor") String hypervisor)
             throws IOException, ServletException {
         ListBoxModel m = new ListBoxModel();
+        
+        if (!Jenkins.get().hasPermission(Jenkins.ADMINISTER)) {
+            rsp.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+        
         m.add(new ListBoxModel.Option("", ""));
         for (Cloud cloud : Jenkins.get().clouds) {
             if (cloud instanceof Hypervisor) {
