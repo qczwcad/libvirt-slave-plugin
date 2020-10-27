@@ -4,12 +4,12 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.2</version>
+        <version>4.7</version>
         <relativePath />
     </parent>
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>libvirt-slave</artifactId>
-    <version>1.9.0-custom-1.0</version>
+    <version>1.9.0-custom-2.0</version>
     <packaging>hpi</packaging>
     <name>Jenkins Libvirt Agents plugin</name>
     <description>This plugin allows Jenkins to use libvirt-based agents.</description>
@@ -45,12 +45,14 @@
         <connection>scm:git:git://github.com/jenkinsci/libvirt-slave-plugin.git</connection>
         <developerConnection>scm:git:git@github.com:jenkinsci/libvirt-slave-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/libvirt-slave-plugin</url>
-        <tag>libvirt-slave-1.8.6</tag>
+        <tag>HEAD</tag>
     </scm>
     <properties>
         <java.level>8</java.level>
-        <jenkins.version>2.249.1</jenkins.version>
-        <slf4jVersion>1.7.30</slf4jVersion>
+        <jenkins.version>2.190.1</jenkins.version>
+        <spotbugs.effort>Max</spotbugs.effort>
+        <spotbugs.failOnError>false</spotbugs.failOnError>
+        <spotbugs.threshold>Low</spotbugs.threshold>
     </properties>
     <repositories>
         <repository>
@@ -88,50 +90,6 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                    <showDeprecation>true</showDeprecation>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>add-eclipse-sources</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>add-source</goal>
-                        </goals>
-                        <configuration>
-                            <sources>
-                                <source>${basedir}/target/generated-sources/localizer</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-release-plugin</artifactId>
-                <version>2.5.3</version>
-            </plugin>
-            <plugin>
-                <groupId>org.jenkins-ci.tools</groupId>
-                <artifactId>maven-hpi-plugin</artifactId>
-                <configuration>
-                    <pluginFirstClassLoader>true</pluginFirstClassLoader>
-                    <maskClasses>
-                        net.java.dev.jna.
-                        com.google.common.
-                    </maskClasses>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-pmd-plugin</artifactId>
                 <version>3.13.0</version>
                 <executions>
@@ -147,26 +105,6 @@
                     <failOnViolation>false</failOnViolation>
                     <verbose>true</verbose>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>4.0.0</version>
-                <configuration>
-                    <effort>MAX</effort>
-                    <threshold>Low</threshold>
-                    <excludeFilterFile>src/spotbugs/excludesFilter.xml</excludeFilterFile>
-                    <failOnError>false</failOnError>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>spotbugs-verify</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -205,38 +143,15 @@
     </reporting>
     <dependencies>
         <dependency>
-            <groupId>net.java.dev.jna</groupId>
-            <artifactId>jna</artifactId>
-            <version>5.5.0</version>
-        </dependency>
-        <dependency>
             <groupId>org.libvirt</groupId>
             <artifactId>libvirt</artifactId>
             <version>0.5.2</version>
-        </dependency>
-        <dependency>
-            <groupId>com.nirima.jlibvirt</groupId>
-            <artifactId>jlibvirt</artifactId>
-            <version>0.2.1</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.jenkins-ci.plugins</groupId>
-            <artifactId>credentials</artifactId>
-            <version>2.3.6</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-credentials</artifactId>
             <version>1.18.1</version>
         </dependency>
-       
-
         <dependency>
             <groupId>com.googlecode.json-simple</groupId>
             <artifactId>json-simple</artifactId>
@@ -246,3 +161,6 @@
         </dependency>
     </dependencies>
 </project>
+       
+
+        

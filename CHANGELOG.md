@@ -1,5 +1,14 @@
 # Changelog
 
+### 1.9.0-custom-2.0
+
+Release date: _Oct 27, 2020_
+
+-   Fix SECURITY-1014 (2)
+-   Fix JENKINS-27640 by removing jLibVirt: net.schmizz.sshj.userauth.UserAuthException: Exhausted available authentication methods
+-   Fix JENKINS-63027: Libvirt-agent plugin is not populating the credentials drop-down
+-   Improvements: improved connection stabilities when doing snapshort reverting 
+
 ### 1.8.6
 
 Release date: _Jul 6, 2020_
