@@ -18,9 +18,7 @@ package hudson.plugins.libvirt;
 import hudson.model.TaskListener;
 
 import hudson.model.Descriptor;
-import hudson.model.Node;
 import hudson.plugins.libvirt.lib.IDomain;
-import hudson.plugins.libvirt.lib.IDomainSnapshot;
 import hudson.plugins.libvirt.lib.VirtException;
 import hudson.slaves.Cloud;
 import hudson.slaves.ComputerLauncher;
@@ -139,15 +137,12 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                 if (domain.isRunningOrBlocked()) {
                     domain.shutdown();
                     // make sure the domain is off when we call domain.create() bellow.
-                    while (true)
-                    {
-                        if (domain.isRunningOrBlocked())
-                        {
+                    while (true) {
+                        if (domain.isRunningOrBlocked()) {
                             long waitTime = 3000L;
-                            System.out.printf("Domain is still running, let's wait for %d more seconds\n", waitTime / 1000);
+                            taskListener.getLogger().printf("Domain is still running, let's wait for %d more seconds\n", waitTime / 1000);
                             Thread.sleep(waitTime);
-                        }
-                        else {
+                        } else {
                             break;
                         }
                     }

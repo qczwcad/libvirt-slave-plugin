@@ -214,8 +214,6 @@ public class VirtualMachineSlaveTest {
             timeElapsed++;
             System.out.printf("%d seconds passed\n", new Object[]{Integer.valueOf(timeElapsed)});
         }
-        String healthScore = getHealthScore();
-        Assert.assertTrue(healthScore.equalsIgnoreCase("100"));
         
         int nSuccessful = 0;
         for (Long buildNumber : buildNumbers) {
