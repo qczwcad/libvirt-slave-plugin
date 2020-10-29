@@ -133,13 +133,14 @@ public class VirtualMachineLauncher extends ComputerLauncher {
 
             Map<String, IDomain> computers = virtualMachine.getHypervisor().getDomains();
             IDomain domain = computers.get(virtualMachine.getName());
+            long waitTime = 3000L;
             if (domain != null) {
                 if (domain.isRunningOrBlocked()) {
                     domain.shutdown();
                     // make sure the domain is off when we call domain.create() bellow.
                     while (true) {
-                        if (domain.isRunningOrBlocked()) {
-                            long waitTime = 3000L;
+                        if (!domain.isNotBlockedAndNotRunning()) {
+                            domain.shutdown();
                             taskListener.getLogger().printf("Domain is still running, let's wait for %d more seconds\n", waitTime / 1000);
                             Thread.sleep(waitTime);
                         } else {
@@ -147,7 +148,21 @@ public class VirtualMachineLauncher extends ComputerLauncher {
                         }
                     }
                 }
-                domain.create();
+                try {
+                    domain.create();
+                } catch (VirtException e)
+                {
+                    taskListener.fatalError(e.getMessage(), e);
+
+                    LogRecord rec = new LogRecord(Level.SEVERE, "Error while launching {0} on Hypervisor {1}.");
+                    rec.setParameters(new Object[]{virtualMachine.getName(), virtualMachine.getHypervisor().getHypervisorURI()});
+                    rec.setThrown(e);
+                    LOGGER.log(rec);
+                    
+                    // wait and try one more time.
+                    Thread.sleep(waitTime * 2);
+                    domain.create();
+                }
 
                 int attempts = 0;
                 while (true) {
