@@ -169,6 +169,16 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
             LOGGER.log(Level.SEVERE, "Interrupted while syncing IO: " + e);
         }
         
+        Future<?> ret = null;
+
+        ret = super.disconnect(cause);
+
+        try {
+            waitUntilOffline();
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.SEVERE, "Interrupted while waiting for computer to be offline: " + e);
+        }
+        
         try {
             Map<String, IDomain> computers = hypervisor.getDomains();
             IDomain domain = computers.get(virtualMachineName);
@@ -191,32 +201,17 @@ public class VirtualMachineSlaveComputer extends SlaveComputer {
                 Hypervisor vmC = vmL.findOurHypervisorInstance();
                 vmC.markVMOffline(getDisplayName(), vmL.getVirtualMachineName());
             } else {
-                // log to agent
-                taskListener.getLogger().println("\"" + virtualMachineName + "\" not found on Hypervisor, can not shut down!");
-
-                // log to jenkins
                 LogRecord rec = new LogRecord(Level.WARNING, "Can not shut down {0} on Hypervisor {1}, domain not found!");
                 rec.setParameters(new Object[]{virtualMachineName, hypervisor.getHypervisorURI()});
                 LOGGER.log(rec);
             }
         } catch (VirtException t) {
-            taskListener.fatalError(t.getMessage(), t);
-
             LogRecord rec = new LogRecord(Level.SEVERE, "Error while shutting down {0} on Hypervisor {1}.");
             rec.setParameters(new Object[]{slave.getVirtualMachineName(), hypervisor.getHypervisorURI()});
             rec.setThrown(t);
             LOGGER.log(rec);
         }
 
-        Future<?> ret = null;
-
-        ret = super.disconnect(cause);
-
-        try {
-            waitUntilOffline();
-        } catch (InterruptedException e) {
-            LOGGER.log(Level.SEVERE, "Interrupted while waiting for computer to be offline: " + e);
-        }
         return ret;
     }
 
